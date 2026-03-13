@@ -23,6 +23,23 @@ export interface ProxyConfig {
   authMode: AuthMode;
 }
 
+function buildUpstreamPath(
+  upstreamUrl: URL,
+  requestUrl: string | undefined,
+): string {
+  const reqPath = requestUrl || '/';
+  const parsedRequestUrl = new URL(reqPath, 'http://proxy.local');
+  const upstreamBasePath =
+    upstreamUrl.pathname === '/'
+      ? ''
+      : upstreamUrl.pathname.replace(/\/+$/, '');
+  const requestPath = parsedRequestUrl.pathname.startsWith('/')
+    ? parsedRequestUrl.pathname
+    : `/${parsedRequestUrl.pathname}`;
+
+  return `${upstreamBasePath}${requestPath}${parsedRequestUrl.search}`;
+}
+
 export function startCredentialProxy(
   port: number,
   host = '127.0.0.1',
@@ -83,7 +100,7 @@ export function startCredentialProxy(
           {
             hostname: upstreamUrl.hostname,
             port: upstreamUrl.port || (isHttps ? 443 : 80),
-            path: req.url,
+            path: buildUpstreamPath(upstreamUrl, req.url),
             method: req.method,
             headers,
           } as RequestOptions,

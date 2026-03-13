@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { EventEmitter } from 'events';
 import { PassThrough } from 'stream';
+import { spawn } from 'child_process';
 
 // Sentinel markers must match container-runner.ts
 const OUTPUT_START_MARKER = '---NANOCLAW_OUTPUT_START---';
@@ -49,6 +50,15 @@ vi.mock('fs', async () => {
 // Mock mount-security
 vi.mock('./mount-security.js', () => ({
   validateAdditionalMounts: vi.fn(() => []),
+}));
+
+const mockEnv: Record<string, string> = {};
+vi.mock('./env.js', () => ({
+  readEnvFile: vi.fn((keys: string[]) =>
+    Object.fromEntries(
+      Object.entries(mockEnv).filter(([key]) => keys.includes(key)),
+    ),
+  ),
 }));
 
 // Create a controllable fake ChildProcess
@@ -114,7 +124,9 @@ function emitOutputMarker(
 describe('container-runner timeout behavior', () => {
   beforeEach(() => {
     vi.useFakeTimers();
+    vi.clearAllMocks();
     fakeProc = createFakeProcess();
+    for (const key of Object.keys(mockEnv)) delete mockEnv[key];
   });
 
   afterEach(() => {
@@ -206,5 +218,69 @@ describe('container-runner timeout behavior', () => {
     const result = await resultPromise;
     expect(result.status).toBe('success');
     expect(result.newSessionId).toBe('session-456');
+  });
+
+  it('passes custom Claude model env vars into the container', async () => {
+    mockEnv.ANTHROPIC_API_KEY = 'sk-ant-test-key';
+    mockEnv.ANTHROPIC_MODEL = 'openrouter/anthropic/claude-sonnet-4';
+    mockEnv.ANTHROPIC_DEFAULT_HAIKU_MODEL =
+      'openrouter/anthropic/claude-haiku-3.5';
+
+    const resultPromise = runContainerAgent(
+      testGroup,
+      testInput,
+      () => {},
+      async () => {},
+    );
+
+    const spawnMock = vi.mocked(spawn);
+    expect(spawnMock).toHaveBeenCalledTimes(1);
+    const [, containerArgs] = spawnMock.mock.calls[0];
+
+    expect(containerArgs).toEqual(
+      expect.arrayContaining([
+        '-e',
+        'ANTHROPIC_BASE_URL=http://host.docker.internal:3001',
+        '-e',
+        'ANTHROPIC_API_KEY=placeholder',
+        '-e',
+        'ANTHROPIC_MODEL=openrouter/anthropic/claude-sonnet-4',
+        '-e',
+        'ANTHROPIC_DEFAULT_HAIKU_MODEL=openrouter/anthropic/claude-haiku-3.5',
+      ]),
+    );
+
+    fakeProc.emit('close', 0);
+    await vi.advanceTimersByTimeAsync(10);
+    await resultPromise;
+  });
+
+  it('falls back to ANTHROPIC_MODEL for the default haiku model', async () => {
+    mockEnv.ANTHROPIC_API_KEY = 'sk-ant-test-key';
+    mockEnv.ANTHROPIC_MODEL = 'openrouter/anthropic/claude-sonnet-4';
+
+    const resultPromise = runContainerAgent(
+      testGroup,
+      testInput,
+      () => {},
+      async () => {},
+    );
+
+    const spawnMock = vi.mocked(spawn);
+    expect(spawnMock).toHaveBeenCalledTimes(1);
+    const [, containerArgs] = spawnMock.mock.calls[0];
+
+    expect(containerArgs).toEqual(
+      expect.arrayContaining([
+        '-e',
+        'ANTHROPIC_MODEL=openrouter/anthropic/claude-sonnet-4',
+        '-e',
+        'ANTHROPIC_DEFAULT_HAIKU_MODEL=openrouter/anthropic/claude-sonnet-4',
+      ]),
+    );
+
+    fakeProc.emit('close', 0);
+    await vi.advanceTimersByTimeAsync(10);
+    await resultPromise;
   });
 });

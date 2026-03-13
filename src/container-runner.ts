@@ -16,6 +16,7 @@ import {
   IDLE_TIMEOUT,
   TIMEZONE,
 } from './config.js';
+import { readEnvFile } from './env.js';
 import { resolveGroupFolderPath, resolveGroupIpcPath } from './group-folder.js';
 import { logger } from './logger.js';
 import {
@@ -54,6 +55,30 @@ interface VolumeMount {
   hostPath: string;
   containerPath: string;
   readonly: boolean;
+}
+
+const CLAUDE_SDK_ENV_KEYS = [
+  'ANTHROPIC_MODEL',
+  'ANTHROPIC_DEFAULT_HAIKU_MODEL',
+] as const;
+
+function readClaudeSdkEnv(): Record<string, string> {
+  const envFileValues = readEnvFile([...CLAUDE_SDK_ENV_KEYS]);
+  const model = process.env.ANTHROPIC_MODEL || envFileValues.ANTHROPIC_MODEL;
+  const defaultHaikuModel =
+    process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL ||
+    envFileValues.ANTHROPIC_DEFAULT_HAIKU_MODEL ||
+    model;
+
+  const sdkEnv: Record<string, string> = {};
+  if (model) {
+    sdkEnv.ANTHROPIC_MODEL = model;
+  }
+  if (defaultHaikuModel) {
+    sdkEnv.ANTHROPIC_DEFAULT_HAIKU_MODEL = defaultHaikuModel;
+  }
+
+  return sdkEnv;
 }
 
 function buildVolumeMounts(
@@ -236,6 +261,12 @@ function buildContainerArgs(
     args.push('-e', 'ANTHROPIC_API_KEY=placeholder');
   } else {
     args.push('-e', 'CLAUDE_CODE_OAUTH_TOKEN=placeholder');
+  }
+
+  // Pass non-secret model-selection settings through to the SDK so
+  // Claude-compatible endpoints can pick the configured model names.
+  for (const [key, value] of Object.entries(readClaudeSdkEnv())) {
+    args.push('-e', `${key}=${value}`);
   }
 
   // Runtime-specific args for host gateway resolution

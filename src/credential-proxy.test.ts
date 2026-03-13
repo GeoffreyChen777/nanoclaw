@@ -49,12 +49,14 @@ describe('credential-proxy', () => {
   let proxyPort: number;
   let upstreamPort: number;
   let lastUpstreamHeaders: http.IncomingHttpHeaders;
+  let lastUpstreamUrl: string | undefined;
 
   beforeEach(async () => {
     lastUpstreamHeaders = {};
 
     upstreamServer = http.createServer((req, res) => {
       lastUpstreamHeaders = { ...req.headers };
+      lastUpstreamUrl = req.url;
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ ok: true }));
     });
@@ -188,5 +190,32 @@ describe('credential-proxy', () => {
 
     expect(res.statusCode).toBe(502);
     expect(res.body).toBe('Bad Gateway');
+  });
+
+  it('preserves the upstream base path when forwarding requests', async () => {
+    Object.assign(mockEnv, {
+      ANTHROPIC_AUTH_TOKEN: 'real-bearer-token',
+      ANTHROPIC_BASE_URL: `http://127.0.0.1:${upstreamPort}/apps/anthropic`,
+    });
+    proxyServer = await startCredentialProxy(0);
+    proxyPort = (proxyServer.address() as AddressInfo).port;
+
+    await makeRequest(
+      proxyPort,
+      {
+        method: 'POST',
+        path: '/v1/messages?beta=true',
+        headers: {
+          'content-type': 'application/json',
+          authorization: 'Bearer placeholder',
+        },
+      },
+      '{}',
+    );
+
+    expect(lastUpstreamUrl).toBe('/apps/anthropic/v1/messages?beta=true');
+    expect(lastUpstreamHeaders['authorization']).toBe(
+      'Bearer real-bearer-token',
+    );
   });
 });
