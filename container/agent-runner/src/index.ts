@@ -494,22 +494,13 @@ async function main(): Promise<void> {
   // Clean up stale _close sentinel from previous container runs
   try { fs.unlinkSync(IPC_INPUT_CLOSE_SENTINEL); } catch { /* ignore */ }
 
-  // Build initial prompt (drain any pending IPC messages too)
-  let prompt = containerInput.prompt;
-  if (containerInput.isScheduledTask) {
-    prompt = `[SCHEDULED TASK - The following message was sent automatically and is not coming directly from the user or group.]\n\n${prompt}`;
-  }
-  const pending = drainIpcInput();
-  if (pending.length > 0) {
-    log(`Draining ${pending.length} pending IPC messages into initial prompt`);
-    prompt += '\n' + pending.join('\n');
-  }
-
   // --- Slash command handling ---
   // Only known session slash commands are handled here. This prevents
   // accidental interception of user prompts that happen to start with '/'.
+  // Check the original prompt before draining IPC messages so a clean
+  // session command cannot be contaminated into the normal streaming path.
   const KNOWN_SESSION_COMMANDS = new Set(['/compact']);
-  const trimmedPrompt = prompt.trim();
+  const trimmedPrompt = containerInput.prompt.trim();
   const isSessionSlashCommand = KNOWN_SESSION_COMMANDS.has(trimmedPrompt);
 
   if (isSessionSlashCommand) {
@@ -604,6 +595,17 @@ async function main(): Promise<void> {
     return;
   }
   // --- End slash command handling ---
+
+  // Build initial prompt (drain any pending IPC messages too)
+  let prompt = containerInput.prompt;
+  if (containerInput.isScheduledTask) {
+    prompt = `[SCHEDULED TASK - The following message was sent automatically and is not coming directly from the user or group.]\n\n${prompt}`;
+  }
+  const pending = drainIpcInput();
+  if (pending.length > 0) {
+    log(`Draining ${pending.length} pending IPC messages into initial prompt`);
+    prompt += '\n' + pending.join('\n');
+  }
 
   // Query loop: run query → wait for IPC message → run new query → repeat
   let resumeAt: string | undefined;
