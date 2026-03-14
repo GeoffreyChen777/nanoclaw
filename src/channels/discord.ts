@@ -161,7 +161,12 @@ export class DiscordChannel implements Channel {
       // Auto-register new Discord guild channels only when the sender
       // explicitly addresses the bot.
       let group = this.opts.registeredGroups()[chatJid];
-      if (!group && isGroup && TRIGGER_PATTERN.test(content) && this.opts.registerGroup) {
+      if (
+        !group &&
+        isGroup &&
+        TRIGGER_PATTERN.test(content) &&
+        this.opts.registerGroup
+      ) {
         group = {
           name: chatName,
           folder: buildAutoRegisteredFolder(chatJid),
