@@ -69,25 +69,39 @@ export class DiscordChannel implements Channel {
         chatName = senderName;
       }
 
-      // Translate Discord @bot mentions into TRIGGER_PATTERN format.
-      // Discord mentions look like <@botUserId> — these won't match
-      // TRIGGER_PATTERN (e.g., ^@Andy\b), so we prepend the trigger
-      // when the bot is @mentioned.
+      // Translate Discord app or matching-role mentions into TRIGGER_PATTERN
+      // format so trigger-required channels can wake on native mentions.
       if (this.client?.user) {
         const botId = this.client.user.id;
+        const matchingRoleIds = [
+          ...(message.mentions.roles?.values() ?? []),
+        ]
+          .filter((role) => role.name === ASSISTANT_NAME)
+          .map((role) => role.id);
         const isBotMentioned =
           message.mentions.users.has(botId) ||
           content.includes(`<@${botId}>`) ||
           content.includes(`<@!${botId}>`);
+        const isMatchingRoleMentioned =
+          matchingRoleIds.length > 0 &&
+          matchingRoleIds.some((roleId) => content.includes(`<@&${roleId}>`));
 
-        if (isBotMentioned) {
-          // Strip the <@botId> mention to avoid visual clutter
-          content = content
-            .replace(new RegExp(`<@!?${botId}>`, 'g'), '')
-            .trim();
+        if (isBotMentioned || isMatchingRoleMentioned) {
+          const mentionPatterns = [new RegExp(`<@!?${botId}>`, 'g')];
+          for (const roleId of matchingRoleIds) {
+            mentionPatterns.push(new RegExp(`<@&${roleId}>`, 'g'));
+          }
+
+          for (const pattern of mentionPatterns) {
+            content = content.replace(pattern, '');
+          }
+          content = content.trim();
+
           // Prepend trigger if not already present
           if (!TRIGGER_PATTERN.test(content)) {
-            content = `@${ASSISTANT_NAME} ${content}`;
+            content = content
+              ? `@${ASSISTANT_NAME} ${content}`
+              : `@${ASSISTANT_NAME}`;
           }
         }
       }

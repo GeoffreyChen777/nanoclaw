@@ -137,6 +137,7 @@ function createMessage(overrides: {
   attachments?: Map<string, any>;
   reference?: { messageId?: string };
   mentionsBotId?: boolean;
+  mentionedRoles?: Array<{ id: string; name: string }>;
 }) {
   const channelId = overrides.channelId ?? '1234567890123456';
   const authorId = overrides.authorId ?? '55512345';
@@ -145,6 +146,10 @@ function createMessage(overrides: {
   const mentionsMap = new Map();
   if (overrides.mentionsBotId) {
     mentionsMap.set(botId, { id: botId });
+  }
+  const roleMentionsMap = new Map();
+  for (const role of overrides.mentionedRoles ?? []) {
+    roleMentionsMap.set(role.id, role);
   }
 
   return {
@@ -173,6 +178,7 @@ function createMessage(overrides: {
     },
     mentions: {
       users: mentionsMap,
+      roles: roleMentionsMap,
     },
     attachments: overrides.attachments ?? new Map(),
     reference: overrides.reference ?? null,
@@ -423,6 +429,26 @@ describe('DiscordChannel', () => {
       );
     });
 
+    it('translates matching role mention to trigger format', async () => {
+      const opts = createTestOpts();
+      const channel = new DiscordChannel('test-token', opts);
+      await channel.connect();
+
+      const msg = createMessage({
+        content: '<@&12345> hello',
+        mentionedRoles: [{ id: '12345', name: 'Andy' }],
+        guildName: 'Server',
+      });
+      await triggerMessage(msg);
+
+      expect(opts.onMessage).toHaveBeenCalledWith(
+        'dc:1234567890123456',
+        expect.objectContaining({
+          content: '@Andy hello',
+        }),
+      );
+    });
+
     it('does not translate if message already matches trigger', async () => {
       const opts = createTestOpts();
       const channel = new DiscordChannel('test-token', opts);
@@ -437,6 +463,26 @@ describe('DiscordChannel', () => {
 
       // Should NOT prepend @Andy — already starts with trigger
       // But the <@botId> should still be stripped
+      expect(opts.onMessage).toHaveBeenCalledWith(
+        'dc:1234567890123456',
+        expect.objectContaining({
+          content: '@Andy hello',
+        }),
+      );
+    });
+
+    it('strips matching role mention without duplicating the trigger', async () => {
+      const opts = createTestOpts();
+      const channel = new DiscordChannel('test-token', opts);
+      await channel.connect();
+
+      const msg = createMessage({
+        content: '@Andy hello <@&12345>',
+        mentionedRoles: [{ id: '12345', name: 'Andy' }],
+        guildName: 'Server',
+      });
+      await triggerMessage(msg);
+
       expect(opts.onMessage).toHaveBeenCalledWith(
         'dc:1234567890123456',
         expect.objectContaining({
@@ -464,6 +510,26 @@ describe('DiscordChannel', () => {
       );
     });
 
+    it('leaves unrelated role mentions unchanged', async () => {
+      const opts = createTestOpts();
+      const channel = new DiscordChannel('test-token', opts);
+      await channel.connect();
+
+      const msg = createMessage({
+        content: '<@&67890> hello everyone',
+        mentionedRoles: [{ id: '67890', name: 'Moderators' }],
+        guildName: 'Server',
+      });
+      await triggerMessage(msg);
+
+      expect(opts.onMessage).toHaveBeenCalledWith(
+        'dc:1234567890123456',
+        expect.objectContaining({
+          content: '<@&67890> hello everyone',
+        }),
+      );
+    });
+
     it('handles <@!botId> (nickname mention format)', async () => {
       const opts = createTestOpts();
       const channel = new DiscordChannel('test-token', opts);
@@ -480,6 +546,46 @@ describe('DiscordChannel', () => {
         'dc:1234567890123456',
         expect.objectContaining({
           content: '@Andy check this',
+        }),
+      );
+    });
+
+    it('normalizes app and matching role mentions to a single trigger', async () => {
+      const opts = createTestOpts();
+      const channel = new DiscordChannel('test-token', opts);
+      await channel.connect();
+
+      const msg = createMessage({
+        content: '<@999888777> <@&12345> check this',
+        mentionsBotId: true,
+        mentionedRoles: [{ id: '12345', name: 'Andy' }],
+        guildName: 'Server',
+      });
+      await triggerMessage(msg);
+
+      expect(opts.onMessage).toHaveBeenCalledWith(
+        'dc:1234567890123456',
+        expect.objectContaining({
+          content: '@Andy check this',
+        }),
+      );
+    });
+
+    it('leaves plain-text trigger messages unchanged', async () => {
+      const opts = createTestOpts();
+      const channel = new DiscordChannel('test-token', opts);
+      await channel.connect();
+
+      const msg = createMessage({
+        content: '@Andy hello',
+        guildName: 'Server',
+      });
+      await triggerMessage(msg);
+
+      expect(opts.onMessage).toHaveBeenCalledWith(
+        'dc:1234567890123456',
+        expect.objectContaining({
+          content: '@Andy hello',
         }),
       );
     });
