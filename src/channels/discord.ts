@@ -73,9 +73,7 @@ export class DiscordChannel implements Channel {
       // format so trigger-required channels can wake on native mentions.
       if (this.client?.user) {
         const botId = this.client.user.id;
-        const matchingRoleIds = [
-          ...(message.mentions.roles?.values() ?? []),
-        ]
+        const matchingRoleIds = [...(message.mentions.roles?.values() ?? [])]
           .filter((role) => role.name === ASSISTANT_NAME)
           .map((role) => role.id);
         const isBotMentioned =
