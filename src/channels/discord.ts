@@ -21,6 +21,11 @@ export interface DiscordChannelOpts {
   onMessage: OnInboundMessage;
   onChatMetadata: OnChatMetadata;
   registeredGroups: () => Record<string, RegisteredGroup>;
+  registerGroup?: (jid: string, group: RegisteredGroup) => void;
+}
+
+function buildAutoRegisteredFolder(chatJid: string): string {
+  return `discord_${chatJid.replace(/^dc:/, '')}`;
 }
 
 export class DiscordChannel implements Channel {
@@ -153,8 +158,25 @@ export class DiscordChannel implements Channel {
         isGroup,
       );
 
+      // Auto-register new Discord guild channels only when the sender
+      // explicitly addresses the bot.
+      let group = this.opts.registeredGroups()[chatJid];
+      if (!group && isGroup && TRIGGER_PATTERN.test(content) && this.opts.registerGroup) {
+        group = {
+          name: chatName,
+          folder: buildAutoRegisteredFolder(chatJid),
+          trigger: `@${ASSISTANT_NAME}`,
+          added_at: new Date().toISOString(),
+          requiresTrigger: true,
+        };
+        this.opts.registerGroup(chatJid, group);
+        logger.info(
+          { chatJid, chatName, folder: group.folder },
+          'Auto-registered Discord channel',
+        );
+      }
+
       // Only deliver full message for registered groups
-      const group = this.opts.registeredGroups()[chatJid];
       if (!group) {
         logger.debug(
           { chatJid, chatName },

@@ -110,6 +110,7 @@ function createTestOpts(
   return {
     onMessage: vi.fn(),
     onChatMetadata: vi.fn(),
+    registerGroup: vi.fn(),
     registeredGroups: vi.fn(() => ({
       'dc:1234567890123456': {
         name: 'Test Server #general',
@@ -301,7 +302,73 @@ describe('DiscordChannel', () => {
         'discord',
         true,
       );
+      expect(opts.registerGroup).not.toHaveBeenCalled();
       expect(opts.onMessage).not.toHaveBeenCalled();
+    });
+
+    it('auto-registers an unregistered guild channel when the bot is addressed', async () => {
+      const opts = createTestOpts({
+        registeredGroups: vi.fn(() => ({})),
+      });
+      const channel = new DiscordChannel('test-token', opts);
+      await channel.connect();
+
+      const msg = createMessage({
+        channelId: '9999999999999999',
+        content: '@Andy hello there',
+        guildName: 'Other Server',
+        channelName: 'new-bot-channel',
+      });
+      await triggerMessage(msg);
+
+      expect(opts.registerGroup).toHaveBeenCalledWith(
+        'dc:9999999999999999',
+        expect.objectContaining({
+          name: 'Other Server #new-bot-channel',
+          folder: 'discord_9999999999999999',
+          trigger: '@Andy',
+          requiresTrigger: true,
+        }),
+      );
+      expect(opts.onMessage).toHaveBeenCalledWith(
+        'dc:9999999999999999',
+        expect.objectContaining({
+          content: '@Andy hello there',
+        }),
+      );
+    });
+
+    it('auto-registers an unregistered guild channel on direct bot mention', async () => {
+      const opts = createTestOpts({
+        registeredGroups: vi.fn(() => ({})),
+      });
+      const channel = new DiscordChannel('test-token', opts);
+      await channel.connect();
+
+      const msg = createMessage({
+        channelId: '7777777777777777',
+        content: '<@999888777> hello there',
+        mentionsBotId: true,
+        guildName: 'Other Server',
+        channelName: 'mentions-only',
+      });
+      await triggerMessage(msg);
+
+      expect(opts.registerGroup).toHaveBeenCalledWith(
+        'dc:7777777777777777',
+        expect.objectContaining({
+          name: 'Other Server #mentions-only',
+          folder: 'discord_7777777777777777',
+          trigger: '@Andy',
+          requiresTrigger: true,
+        }),
+      );
+      expect(opts.onMessage).toHaveBeenCalledWith(
+        'dc:7777777777777777',
+        expect.objectContaining({
+          content: '@Andy hello there',
+        }),
+      );
     });
 
     it('ignores bot messages', async () => {
