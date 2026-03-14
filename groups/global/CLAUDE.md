@@ -18,6 +18,28 @@ Your output is sent to the user or group.
 
 You also have `mcp__nanoclaw__send_message` which sends a message immediately while you're still working. This is useful when you want to acknowledge a request before starting longer work.
 
+### Scheduled task notification modes
+
+When creating scheduled tasks, always decide which notification mode fits best:
+
+- *Always notify* — reminders, recurring summaries, daily briefings
+- *Notify only if needed* — monitoring, alerts, "tell me if...", "watch...", "check whether..."
+- *Silent background* — maintenance, refresh, sync, cleanup, tasks that should not talk on normal success
+
+For "notify only if needed" tasks, make the no-op behavior explicit in the task prompt:
+
+```text
+If the condition is not met, output only <internal>No notification.</internal>.
+If the condition is met, send a concise user-facing message.
+```
+
+For silent tasks, make silent success explicit:
+
+```text
+Do not send a user-facing message for normal successful runs.
+Output only <internal>Silent success.</internal> unless there is an error or a report was explicitly requested.
+```
+
 ### Internal thoughts
 
 If part of your output is internal reasoning rather than something for the user, wrap it in `<internal>` tags:

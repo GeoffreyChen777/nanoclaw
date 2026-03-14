@@ -81,6 +81,21 @@ MESSAGING BEHAVIOR - The task agent's output is sent to the user or group. It ca
 \u2022 Only send a message when there's something to report (e.g., "notify me if...")
 \u2022 Never send a message (background maintenance tasks)
 
+DEFAULT HEURISTICS - Infer the messaging mode from the user's wording unless the ambiguity is important:
+\u2022 "remind me", "send me a daily summary", "every morning" \u2192 always send
+\u2022 "notify me if", "alert me when", "watch", "monitor", "check whether" \u2192 only send when the condition is met
+\u2022 "refresh", "sync", "cleanup", "rebuild", "maintain", "don't message me" \u2192 silent background task
+
+CONDITIONAL TASKS - For monitoring or alerting tasks, make the no-op case explicit in the scheduled prompt. Prefer wording like:
+\u2022 If the condition is not met, output only <internal>No notification.</internal>.
+\u2022 If the condition is met, send a concise user-facing message with the key details.
+
+SILENT TASKS - For background tasks, make silent success explicit in the scheduled prompt. Prefer wording like:
+\u2022 Do not send a user-facing message for normal successful runs.
+\u2022 Output only <internal>Silent success.</internal> unless there is an error or the prompt explicitly asks for a report.
+
+AVOID DUPLICATES - If the scheduled task uses send_message, tell it not to also emit a second visible final response. After sending the user-facing message, any recap should be wrapped in <internal> tags.
+
 SCHEDULE VALUE FORMAT (all times are LOCAL timezone):
 \u2022 cron: Standard cron expression (e.g., "*/5 * * * *" for every 5 minutes, "0 9 * * *" for daily at 9am LOCAL time)
 \u2022 interval: Milliseconds between runs (e.g., "300000" for 5 minutes, "3600000" for 1 hour)
