@@ -139,6 +139,8 @@ function createMessage(overrides: {
   reference?: { messageId?: string };
   mentionsBotId?: boolean;
   mentionedRoles?: Array<{ id: string; name: string }>;
+  repliedContent?: string;
+  repliedAuthorDisplayName?: string;
 }) {
   const channelId = overrides.channelId ?? '1234567890123456';
   const authorId = overrides.authorId ?? '55512345';
@@ -172,8 +174,12 @@ function createMessage(overrides: {
       name: overrides.channelName ?? 'general',
       messages: {
         fetch: vi.fn().mockResolvedValue({
-          author: { username: 'Bob', displayName: 'Bob' },
-          member: { displayName: 'Bob' },
+          content: overrides.repliedContent ?? 'Original message',
+          author: {
+            username: overrides.repliedAuthorDisplayName ?? 'Bob',
+            displayName: overrides.repliedAuthorDisplayName ?? 'Bob',
+          },
+          member: { displayName: overrides.repliedAuthorDisplayName ?? 'Bob' },
         }),
       },
     },
@@ -781,7 +787,7 @@ describe('DiscordChannel', () => {
   // --- Reply context ---
 
   describe('reply context', () => {
-    it('includes reply author in content', async () => {
+    it('includes reply author and referenced content', async () => {
       const opts = createTestOpts();
       const channel = new DiscordChannel('test-token', opts);
       await channel.connect();
@@ -789,6 +795,29 @@ describe('DiscordChannel', () => {
       const msg = createMessage({
         content: 'I agree with that',
         reference: { messageId: 'original_msg_id' },
+        repliedContent: 'Here is the original point',
+        guildName: 'Server',
+      });
+      await triggerMessage(msg);
+
+      expect(opts.onMessage).toHaveBeenCalledWith(
+        'dc:1234567890123456',
+        expect.objectContaining({
+          content:
+            '[Reply to Bob: Here is the original point] I agree with that',
+        }),
+      );
+    });
+
+    it('falls back to reply author when referenced content is empty', async () => {
+      const opts = createTestOpts();
+      const channel = new DiscordChannel('test-token', opts);
+      await channel.connect();
+
+      const msg = createMessage({
+        content: 'I agree with that',
+        reference: { messageId: 'original_msg_id' },
+        repliedContent: '',
         guildName: 'Server',
       });
       await triggerMessage(msg);

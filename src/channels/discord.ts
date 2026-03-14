@@ -132,7 +132,8 @@ export class DiscordChannel implements Channel {
         }
       }
 
-      // Handle reply context — include who the user is replying to
+      // Handle reply context — include who the user is replying to and,
+      // when available, the referenced message content.
       if (message.reference?.messageId) {
         try {
           const repliedTo = await message.channel.messages.fetch(
@@ -142,7 +143,10 @@ export class DiscordChannel implements Channel {
             repliedTo.member?.displayName ||
             repliedTo.author.displayName ||
             repliedTo.author.username;
-          content = `[Reply to ${replyAuthor}] ${content}`;
+          const replyContent = repliedTo.content?.trim();
+          content = replyContent
+            ? `[Reply to ${replyAuthor}: ${replyContent}] ${content}`
+            : `[Reply to ${replyAuthor}] ${content}`;
         } catch {
           // Referenced message may have been deleted
         }
